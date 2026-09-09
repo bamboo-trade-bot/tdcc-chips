@@ -184,6 +184,7 @@ footer a { color: var(--ink-2); }
     <button data-tab="top" aria-selected="false">全市場大戶增幅</button>
     <button data-tab="stock" aria-selected="false">個股查詢</button>
     <button data-tab="screen" aria-selected="false">選股策略</button>
+    <button data-tab="manage" aria-selected="false">族群管理</button>
   </nav>
 </div></header>
 
@@ -235,6 +236,58 @@ footer a { color: var(--ink-2); }
   <div id="s-body"></div>
 </section>
 
+<section class="tab" id="tab-manage">
+  <div class="card">
+    <h2>族群管理</h2>
+    <div class="note">
+      在這裡新增族群、加減成分股，改完立刻反映到其他分頁。<b>修改只存在你這台瀏覽器</b>
+      （清掉瀏覽器資料就會還原）。要讓修改變成網站正式版、其他裝置也看得到，
+      請按「匯出 groups.json」再 commit 回 repo。
+    </div>
+    <div class="row" id="mg-status"></div>
+  </div>
+
+  <div class="card">
+    <h2>新增族群</h2>
+    <div class="row">
+      <label class="f">族群名稱<input type="text" id="mg-newg" placeholder="例如 CPO" size="16"></label>
+      <button class="go" id="mg-addg">建立</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>加入個股</h2>
+    <div class="row">
+      <label class="f">族群<select id="mg-target"></select></label>
+      <label class="f">證券代號或名稱
+        <input type="text" id="mg-code" list="mg-list" placeholder="2330 或 台積電" size="18">
+        <datalist id="mg-list"></datalist></label>
+      <button class="go" id="mg-addc">加入</button>
+      <div class="note" id="mg-msg" style="margin:0"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>目前族群</h2>
+    <div class="note">點成分股上的 × 移除；點代號可跳到個股查詢。</div>
+    <div id="mg-list-groups"></div>
+  </div>
+
+  <div class="card">
+    <h2>匯出／匯入</h2>
+    <div class="row">
+      <button class="go" id="mg-export">匯出 groups.json</button>
+      <button class="go" id="mg-import" style="background:var(--panel);color:var(--ink);border-color:var(--rule)">匯入 JSON</button>
+      <input type="file" id="mg-file" accept=".json,application/json" hidden>
+      <button class="go" id="mg-reset" style="background:var(--panel);color:var(--ink);border-color:var(--rule)">還原成網站預設</button>
+    </div>
+    <div class="note" style="margin-top:12px">
+      匯出的檔案覆蓋掉 <code>static_data/groups.json</code> 後 push，排程重建時就會變成正式版：
+      <br><code>git add static_data &amp;&amp; git commit -m "更新族群" &amp;&amp; git push</code>
+    </div>
+  </div>
+</section>
+
 <section class="tab" id="tab-screen">
   <div class="card">
     <h2>籌碼選股策略</h2>
@@ -263,8 +316,52 @@ const DATA = /*__DATA__*/;
 const $ = s => document.querySelector(s);
 const S = DATA.series, LAST = S.length - 1;
 const CODES = DATA.codes, INFO = DATA.info;
-const GROUPS = DATA.groups;
-const GNAMES = Object.keys(GROUPS).sort();
+const CODE_IDX = new Map(CODES.map((c, i) => [c, i]));
+
+/* 族群：頁面內建的是 static_data/groups.json 匯出的版本；使用者在「族群管理」
+   改過的話存在這台瀏覽器的 localStorage，之後每次開都以自訂版為準。
+   儲存時存「證券代號」而不是索引 —— 索引會隨每週重建而位移。 */
+const DEFAULT_GROUPS = DATA.groups;
+const LS_KEY = 'tdcc-groups-v1';
+let GROUPS = DEFAULT_GROUPS, GNAMES = [], CUSTOM = false;
+
+const toCodes = g => Object.fromEntries(Object.entries(g)
+  .map(([k, v]) => [k, v.map(i => CODES[i]).filter(Boolean)]));
+const fromCodes = o => Object.fromEntries(Object.entries(o)
+  .map(([k, v]) => [k, (v || []).map(c => CODE_IDX.get(String(c).trim().toUpperCase()))
+    .filter(i => i != null)]));
+
+function loadGroups() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) { GROUPS = fromCodes(JSON.parse(raw)); CUSTOM = true; }
+  } catch (e) { /* 無痕視窗或封鎖儲存，就用內建版 */ }
+  GNAMES = Object.keys(GROUPS).sort();
+}
+function saveGroups() {
+  GNAMES = Object.keys(GROUPS).sort();
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(toCodes(GROUPS)));
+    CUSTOM = true;
+  } catch (e) {
+    alert('這個瀏覽器不允許儲存，改動只在這次瀏覽有效。');
+  }
+}
+function resetGroups() {
+  try { localStorage.removeItem(LS_KEY); } catch (e) { /* noop */ }
+  GROUPS = DEFAULT_GROUPS; CUSTOM = false;
+  GNAMES = Object.keys(GROUPS).sort();
+}
+/* 族群改動後：重算彙總、更新標頭、重畫目前分頁 */
+function afterEdit() {
+  GSTATS = [];
+  if (curGroup && !GROUPS[curGroup]) curGroup = null;
+  renderMeta();
+  renderManage();
+  const on = document.querySelector('.tab.on');
+  if (on && on.id !== 'tab-manage') show(on.id.slice(4));
+}
+loadGroups();
 
 const roc = d => d ? `${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6)}` : '—';
 const esc = s => String(s == null ? '' : s)
@@ -452,6 +549,13 @@ function stockTable(sel, rows, defKey) {
 let curGroup = null;
 function renderMembers() {
   if (!GSTATS.length) renderGroups();
+  if (!GSTATS.length) {
+    $('#m-pick').innerHTML = '';
+    $('#m-kpis').innerHTML = '';
+    $('#m-note').innerHTML = '還沒有任何有成分股的族群，到「族群管理」新增。';
+    $('#m-table').innerHTML = '';
+    return;
+  }
   if (!curGroup) curGroup = GSTATS.slice().sort((a, b) =>
     (b.d_b4p ?? -1e9) - (a.d_b4p ?? -1e9))[0].name;
   $('#m-pick').innerHTML = GNAMES.map(g =>
@@ -654,6 +758,7 @@ const RENDER = {
   top: () => renderTop(!$('#t-sort')),
   stock: () => { if (!$('#s-body').innerHTML) renderStock($('#s-no').value); },
   screen: () => renderScreen(!$('#sc-cap')),
+  manage: renderManage,
 };
 function show(tab) {
   document.querySelectorAll('#nav button').forEach(b =>
@@ -676,9 +781,159 @@ $('#s-no').addEventListener('keydown', e => {
   if (e.key === 'Enter') renderStock($('#s-no').value);
 });
 
-$('#meta').innerHTML =
-  `本週：<b>${roc(S[W].date)}</b>　上週：<b>${roc(S[P] && S[P].date)}</b>`
-  + `<span class="sep">│</span>${S.length} 週資料　${nf(CODES.length)} 檔證券　${GNAMES.length} 個族群`
-  + `<span class="sep">│</span>更新於 ${esc(DATA.generated_at)}`;
+/* ---------- 族群管理 ---------- */
+function renderManage() {
+  if (!$('#mg-newg')) return;
+  const total = GNAMES.reduce((a, g) => a + GROUPS[g].length, 0);
+  $('#mg-status').innerHTML =
+    `<div class="note" style="margin:0">目前為 <b>${CUSTOM ? '自訂族群' : '網站預設族群'}</b>`
+    + `　${GNAMES.length} 個族群、${total} 個成分股`
+    + (CUSTOM ? '　<span class="pos">（已修改，尚未匯出）</span>' : '') + '</div>';
+
+  $('#mg-target').innerHTML = GNAMES.map(g =>
+    `<option${g === curGroup ? ' selected' : ''}>${esc(g)}</option>`).join('')
+    || '<option value="">（還沒有族群）</option>';
+
+  if (!$('#mg-list').children.length
+      && $('#tab-manage').classList.contains('on')) {
+    $('#mg-list').innerHTML = CODES.map((c, i) =>
+      `<option value="${c}">${esc((INFO[i] || {}).n || '')}</option>`).join('');
+  }
+
+  $('#mg-list-groups').innerHTML = GNAMES.length ? GNAMES.map(g => {
+    const chips = GROUPS[g].map(i =>
+      `<span class="chip"><span data-stock="${esc(CODES[i])}">${esc(CODES[i])}
+        ${esc((INFO[i] || {}).n || '')}</span>
+        <b data-del="${esc(g)}|${esc(CODES[i])}" style="cursor:pointer;margin-left:4px">×</b></span>`).join('');
+    return `<div style="padding:9px 0;border-bottom:1px solid var(--rule-2)">
+      <div class="row" style="gap:8px;margin-bottom:5px">
+        <b>${esc(g)}</b><span class="dash">${GROUPS[g].length} 檔</span>
+        <span class="chip" data-ren="${esc(g)}">改名</span>
+        <span class="chip" data-delg="${esc(g)}">刪除族群</span>
+      </div><div>${chips || '<span class="dash">（尚無成分股）</span>'}</div></div>`;
+  }).join('') : '<div class="empty">還沒有任何族群，用上面的「新增族群」建立。</div>';
+}
+
+function mgMsg(text, ok) {
+  $('#mg-msg').innerHTML = `<span class="${ok ? 'pos' : 'neg'}">${esc(text)}</span>`;
+  setTimeout(() => { if ($('#mg-msg')) $('#mg-msg').textContent = ''; }, 4000);
+}
+
+/* 使用者輸入的可能是代號、也可能是名稱 */
+function resolveCode(input) {
+  const q = (input || '').trim().toUpperCase();
+  if (!q) return null;
+  if (CODE_IDX.has(q)) return CODE_IDX.get(q);
+  const hit = CODES.findIndex((c, i) => ((INFO[i] || {}).n || '').toUpperCase() === q);
+  return hit >= 0 ? hit : null;
+}
+
+document.addEventListener('click', e => {
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    const [g, code] = del.dataset.del.split('|');
+    const i = CODE_IDX.get(code);
+    GROUPS[g] = GROUPS[g].filter(x => x !== i);
+    saveGroups(); afterEdit(); return;
+  }
+  const delg = e.target.closest('[data-delg]');
+  if (delg) {
+    const g = delg.dataset.delg;
+    if (confirm(`確定刪除族群「${g}」？`)) {
+      delete GROUPS[g]; saveGroups(); afterEdit();
+    }
+    return;
+  }
+  const ren = e.target.closest('[data-ren]');
+  if (ren) {
+    const g = ren.dataset.ren;
+    const name = (prompt('新的族群名稱', g) || '').trim();
+    if (name && name !== g) {
+      if (GROUPS[name]) { alert('已經有同名族群了。'); return; }
+      GROUPS[name] = GROUPS[g]; delete GROUPS[g];
+      if (curGroup === g) curGroup = name;
+      saveGroups(); afterEdit();
+    }
+  }
+});
+
+function bindManage() {
+  $('#mg-addg').addEventListener('click', () => {
+    const name = ($('#mg-newg').value || '').trim();
+    if (!name) return mgMsg('請輸入族群名稱');
+    if (GROUPS[name]) return mgMsg(`「${name}」已經存在`);
+    GROUPS = {...GROUPS, [name]: []};
+    $('#mg-newg').value = '';
+    saveGroups(); afterEdit(); mgMsg(`已建立「${name}」`, true);
+  });
+  $('#mg-addc').addEventListener('click', () => {
+    const g = $('#mg-target').value;
+    if (!g) return mgMsg('請先建立族群');
+    const i = resolveCode($('#mg-code').value);
+    if (i == null) return mgMsg(`找不到「${$('#mg-code').value}」，這檔可能沒有集保資料`);
+    if (GROUPS[g].includes(i)) return mgMsg(`${CODES[i]} 已經在「${g}」裡了`);
+    GROUPS[g] = [...GROUPS[g], i].sort((a, b) => CODES[a].localeCompare(CODES[b]));
+    $('#mg-code').value = '';
+    saveGroups(); afterEdit();
+    mgMsg(`已把 ${CODES[i]} ${(INFO[i] || {}).n || ''} 加進「${g}」`, true);
+  });
+  $('#mg-code').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('#mg-addc').click();
+  });
+  $('#mg-newg').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('#mg-addg').click();
+  });
+
+  $('#mg-export').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(toCodes(GROUPS), null, 0)],
+      {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'groups.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  $('#mg-import').addEventListener('click', () => $('#mg-file').click());
+  $('#mg-file').addEventListener('change', ev => {
+    const f = ev.target.files[0];
+    if (!f) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      try {
+        const obj = JSON.parse(fr.result);
+        if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw 0;
+        const next = fromCodes(obj);
+        const missing = Object.values(obj).flat().filter(
+          c => !CODE_IDX.has(String(c).trim().toUpperCase()));
+        GROUPS = next; saveGroups(); afterEdit();
+        alert(`已匯入 ${Object.keys(next).length} 個族群`
+          + (missing.length ? `\n有 ${missing.length} 檔沒有集保資料被略過：`
+            + missing.slice(0, 10).join(', ') : ''));
+      } catch (err) {
+        alert('這個檔案不是預期的格式。應該是 {"族群名": ["2330", ...]} 這種 JSON。');
+      }
+      ev.target.value = '';
+    };
+    fr.readAsText(f);
+  });
+  $('#mg-reset').addEventListener('click', () => {
+    if (confirm('還原成網站預設族群？你在這台瀏覽器做的修改會消失。')) {
+      resetGroups(); afterEdit();
+    }
+  });
+}
+
+/* ---------- 標頭 ---------- */
+function renderMeta() {
+  $('#meta').innerHTML =
+    `本週：<b>${roc(S[W].date)}</b>　上週：<b>${roc(S[P] && S[P].date)}</b>`
+    + `<span class="sep">│</span>${S.length} 週資料　${nf(CODES.length)} 檔證券　`
+    + `${GNAMES.length} 個族群${CUSTOM ? '<span class="chip">自訂</span>' : ''}`
+    + `<span class="sep">│</span>更新於 ${esc(DATA.generated_at)}`;
+}
+
+bindManage();
+renderMeta();
+renderManage();
 renderGroups();
 </script>

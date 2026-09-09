@@ -23,8 +23,13 @@ OUT_DIR = os.path.join(BASE, "_site")
 PLACEHOLDER = "/*__DATA__*/"
 
 
+# 台灣自 1979 年起沒有日光節約時間，固定 UTC+8。用固定偏移而不是 zoneinfo，
+# 是因為 Windows 沒有內建 IANA 時區庫，ZoneInfo("Asia/Taipei") 會需要額外裝 tzdata。
+TAIPEI = datetime.timezone(datetime.timedelta(hours=8))
+
+
 def now_str():
-    return datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
+    return datetime.datetime.now(TAIPEI).strftime("%Y-%m-%d %H:%M 台北時間")
 
 
 def do_export():
