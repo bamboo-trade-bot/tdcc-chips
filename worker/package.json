@@ -1,0 +1,14 @@
+{
+  "name": "tdcc-chips-groups",
+  "version": "1.0.0",
+  "description": "集保族群定義的雲端儲存（Cloudflare Worker + KV），讓靜態站的族群改動能跨裝置共用。",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8788",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.130.0"
+  }
+}

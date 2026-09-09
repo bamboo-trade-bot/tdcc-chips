@@ -39,17 +39,22 @@ jobs:
         if: github.event_name != 'push'
         run: python build_static.py --fetch --no-build
 
-      - name: 回存新增的週資料
+      # 族群可能在網站上被改過（存在 Cloudflare KV），拉回來讓 repo 跟雲端一致。
+      # 沒設定 worker_url 或連不上就沿用 repo 現有版本，不會讓建置失敗。
+      - name: 同步雲端族群
+        run: python build_static.py --sync-groups --no-build
+
+      - name: 回存新增的週資料與族群
         if: github.event_name != 'push'
         run: |
-          if [ -n "$(git status --porcelain static_data/weekly)" ]; then
+          if [ -n "$(git status --porcelain static_data)" ]; then
             git config user.name  "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add static_data/weekly
+            git add static_data
             git commit -m "資料更新：$(ls static_data/weekly | tail -1 | cut -d. -f1)"
             git push
           else
-            echo "沒有新的一週，略過 commit"
+            echo "沒有新資料，略過 commit"
           fi
 
       - name: 建置頁面

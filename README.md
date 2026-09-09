@@ -163,10 +163,12 @@
 「族群管理」分頁可以新增／改名／刪除族群、加減成分股，改完立刻反映到其他分頁。
 加個股時輸入代號或名稱都可以（有自動完成），沒有集保資料的代號會被擋下來。
 
-**修改存在瀏覽器的 localStorage**，只在那台裝置有效，清掉瀏覽器資料就還原。
+改動預設存在瀏覽器的 localStorage，只在那台裝置有效。**接上 Cloudflare Worker + KV
+之後**（見下一節）就能跨裝置共用，排程重建時還會自動寫回 repo。
+
 標頭會出現「自訂」標記提醒你看的不是網站預設版本。
 
-要讓修改變成正式版（其他裝置、下次排程重建都吃得到），按 **匯出 groups.json**，
+沒有接雲端的話，要讓修改變成正式版就按 **匯出 groups.json**，
 用它覆蓋 `static_data/groups.json` 再 push：
 
 ```bash
@@ -177,6 +179,90 @@ git add static_data && git commit -m "更新族群" && git push
 所以也能反過來把 repo 裡的檔案用「匯入 JSON」讀回瀏覽器。
 
 > 存的是**證券代號**不是索引 —— 索引會隨每週重建而位移，存代號才不會錯位。
+
+### 族群雲端同步（Cloudflare Worker + KV）
+
+`worker/` 是一支很小的 Worker，把族群定義存進 KV：
+
+```
+GET /groups                    讀（公開，給頁面和排程用）
+PUT /groups  x-edit-key: ...   寫（要金鑰）
+```
+
+接上之後：多台裝置看到同一份族群，而且**每次排程重建都會把雲端版寫回
+`static_data/groups.json`**，所以 repo 和雲端不會分岔。連不上雲端時頁面照樣能用，
+會退回內建那份。
+
+#### 部署
+
+需要 Cloudflare 帳號。這台機器目前沒裝 Node，兩條路擇一：
+
+**A. 裝 Node 用 wrangler（之後改起來方便）**
+
+```bash
+winget install OpenJS.NodeJS.LTS
+```
+
+重開終端機後：
+
+```bash
+cd worker && npm install && npx wrangler login
+```
+
+建 KV namespace，把印出來的 id 貼進 `wrangler.toml` 的 `[[kv_namespaces]] id`：
+
+```bash
+npx wrangler kv namespace create GROUPS
+```
+
+設編輯金鑰（自己想一組長一點的密碼，會問你輸入）：
+
+```bash
+npx wrangler secret put EDIT_KEY
+```
+
+部署，記下印出來的 `https://tdcc-chips-groups.<你的子網域>.workers.dev`：
+
+```bash
+npx wrangler deploy
+```
+
+**B. 不裝 Node，用 Cloudflare 網頁後台**
+
+1. Workers & Pages → Create → Worker，名稱 `tdcc-chips-groups`，Deploy
+2. Edit code，把 `worker/src/index.js` 整份貼上去，Deploy
+3. Settings → Variables：
+   - Environment Variables 加 `ALLOWED_ORIGINS` = `https://bamboo-trade-bot.github.io`
+   - Secrets（Encrypt）加 `EDIT_KEY` = 你的密碼
+4. Storage & Databases → KV → Create namespace，名稱隨意
+5. 回 Worker 的 Settings → Bindings → Add → KV namespace，**Variable name 必須是 `GROUPS`**
+
+#### 告訴網站 Worker 在哪
+
+把網址填進 `static_data/config.json`，然後重建、push：
+
+```bash
+git add static_data && git commit -m "接上族群雲端同步" && git push
+```
+
+```json
+{"worker_url": "https://tdcc-chips-groups.你的子網域.workers.dev"}
+```
+
+`worker_url` 是空字串時，「雲端同步」那張卡片會整個隱藏，行為跟純靜態版一樣。
+
+#### 使用
+
+「族群管理」分頁的**雲端同步**卡片：填一次編輯金鑰（記在瀏覽器，不用每次輸入）
+→ 改完族群按 **儲存到雲端**。其他裝置開站台就會自動拉到最新版。
+
+- 開站台時會在背景拉雲端；連不上就用本機那份，不會卡住畫面
+- 本機有未同步的修改時，**不會**被雲端版靜默蓋掉，而是跳出版本衝突讓你選
+  「用雲端覆蓋本機」或「保留本機」
+
+> 編輯金鑰存在瀏覽器的 localStorage。它只能改這份族群定義，外洩的後果是別人能改你的
+> 分類，不會影響 GitHub 或其他東西——但還是別在公用電腦上勾著。
+> `ALLOWED_ORIGINS` 只擋瀏覽器的跨站呼叫，不是驗證機制，真正的門檻是 `EDIT_KEY`。
 
 ### 為什麼要壓資料
 
@@ -268,9 +354,12 @@ tdcc/importer.py       Excel 匯入（集保週檔、族群分類、個股 metad
 tdcc/analysis.py       指標計算：排行、族群彙總、個股歷史（本機版用）
 tdcc/static_export.py  壓成靜態站資料 + 組 payload
 
+worker/                族群雲端同步（Cloudflare Worker + KV）
+
 templates/ static/     本機版網頁
 data/tdcc.db           SQLite 資料庫（不進版控）
 static_data/           靜態站資料（要進版控）
+static_data/config.json  worker_url 設定，空字串就是純靜態模式
 _site/index.html       建置產物
 .github/workflows/     GitHub Actions 排程
 ```

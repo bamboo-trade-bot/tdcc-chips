@@ -22,6 +22,8 @@ STATIC_DIR = os.path.join(db.BASE_DIR, "static_data")
 WEEKLY_DIR = os.path.join(STATIC_DIR, "weekly")
 STOCKS_JSON = os.path.join(STATIC_DIR, "stocks.json")
 GROUPS_JSON = os.path.join(STATIC_DIR, "groups.json")
+# 選用設定，目前只有 worker_url（族群雲端儲存的網址）。沒有這個檔就是純靜態模式。
+CONFIG_JSON = os.path.join(STATIC_DIR, "config.json")
 
 BIG400 = db.BIG_THRESHOLDS[400]      # 分級 12~15
 BIG1000 = db.BIG_THRESHOLDS[1000]    # 分級 15
@@ -237,10 +239,12 @@ def build_payload(weekly_dir=WEEKLY_DIR, stocks_json=STOCKS_JSON,
 
     stocks = _load(stocks_json)
     groups = _load(groups_json)
+    config = _load(CONFIG_JSON)
     # 頁面用索引找個股資料，省掉一層字典查詢
     info = [stocks.get(c, {}) for c in codes]
     return {
         "generated_at": generated_at,
+        "worker_url": (config.get("worker_url") or "").rstrip("/"),
         "codes": codes,
         "info": info,
         "series": series,

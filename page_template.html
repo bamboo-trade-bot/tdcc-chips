@@ -247,6 +247,21 @@ footer a { color: var(--ink-2); }
     <div class="row" id="mg-status"></div>
   </div>
 
+  <div class="card" id="mg-cloud-card" hidden>
+    <h2>雲端同步</h2>
+    <div class="note">
+      族群存在 Cloudflare KV，換裝置也看得到；排程重建時會把雲端版寫回
+      <code>static_data/groups.json</code>。讀取公開，儲存要編輯金鑰。
+    </div>
+    <div id="mg-cloud-status"></div>
+    <div class="row" style="margin-top:10px">
+      <label class="f">編輯金鑰
+        <input type="password" id="mg-key" placeholder="wrangler secret 設的 EDIT_KEY" size="22"></label>
+      <button class="go" id="mg-push">儲存到雲端</button>
+      <button class="go" id="mg-pull" style="background:var(--panel);color:var(--ink);border-color:var(--rule)">從雲端重新載入</button>
+    </div>
+  </div>
+
   <div class="card">
     <h2>新增族群</h2>
     <div class="row">
@@ -323,7 +338,17 @@ const CODE_IDX = new Map(CODES.map((c, i) => [c, i]));
    儲存時存「證券代號」而不是索引 —— 索引會隨每週重建而位移。 */
 const DEFAULT_GROUPS = DATA.groups;
 const LS_KEY = 'tdcc-groups-v1';
+const KEY_LS = 'tdcc-edit-key';
+const WORKER = (DATA.worker_url || '').replace(/\/+$/, '');
 let GROUPS = DEFAULT_GROUPS, GNAMES = [], CUSTOM = false;
+/* DIRTY：本機有還沒推上雲端的修改。有 DIRTY 時不會被雲端版本自動蓋掉，
+   而是跳出衝突提示讓使用者選，避免在另一台裝置改到一半的東西被吃掉。 */
+let DIRTY = false, CLOUD_VER = 0, CLOUD_AT = null;
+let CLOUD_STATE = WORKER ? 'idle' : 'off', CLOUD_ERR = '', CLOUD_PENDING = null;
+
+/* 比較兩份族群是否等價：key 與成分股都排序後再比，不受順序影響 */
+const canon = o => JSON.stringify(Object.keys(o).sort()
+  .map(k => [k, [...(o[k] || [])].sort()]));
 
 const toCodes = g => Object.fromEntries(Object.entries(g)
   .map(([k, v]) => [k, v.map(i => CODES[i]).filter(Boolean)]));
@@ -331,29 +356,91 @@ const fromCodes = o => Object.fromEntries(Object.entries(o)
   .map(([k, v]) => [k, (v || []).map(c => CODE_IDX.get(String(c).trim().toUpperCase()))
     .filter(i => i != null)]));
 
+function writeLS() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(
+      {v: toCodes(GROUPS), dirty: DIRTY, version: CLOUD_VER}));
+  } catch (e) {
+    alert('這個瀏覽器不允許儲存，改動只在這次瀏覽有效。');
+  }
+}
 function loadGroups() {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (raw) { GROUPS = fromCodes(JSON.parse(raw)); CUSTOM = true; }
+    if (raw) {
+      const o = JSON.parse(raw);
+      const rec = (o && o.v) ? o : {v: o, dirty: true, version: 0};  // 舊格式相容
+      GROUPS = fromCodes(rec.v); CUSTOM = true;
+      DIRTY = !!rec.dirty; CLOUD_VER = rec.version || 0;
+    }
   } catch (e) { /* 無痕視窗或封鎖儲存，就用內建版 */ }
   GNAMES = Object.keys(GROUPS).sort();
 }
 function saveGroups() {
   GNAMES = Object.keys(GROUPS).sort();
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(toCodes(GROUPS)));
-    CUSTOM = true;
-  } catch (e) {
-    alert('這個瀏覽器不允許儲存，改動只在這次瀏覽有效。');
-  }
+  CUSTOM = true; DIRTY = true;
+  writeLS();
 }
 function resetGroups() {
   try { localStorage.removeItem(LS_KEY); } catch (e) { /* noop */ }
-  GROUPS = DEFAULT_GROUPS; CUSTOM = false;
+  GROUPS = DEFAULT_GROUPS; CUSTOM = false; DIRTY = false;
   GNAMES = Object.keys(GROUPS).sort();
 }
-/* 族群改動後：重算彙總、更新標頭、重畫目前分頁 */
+
+/* ---------- 雲端同步（Cloudflare Worker + KV） ---------- */
+
+async function fetchCloud(explicit) {
+  if (!WORKER) return;
+  CLOUD_STATE = 'loading'; CLOUD_ERR = ''; renderCloud();
+  try {
+    const r = await fetch(WORKER + '/groups', {cache: 'no-store'});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    if (!d.groups) { CLOUD_STATE = 'empty'; renderCloud(); return; }
+
+    CLOUD_VER = d.version || 0; CLOUD_AT = d.updated_at;
+    if (canon(d.groups) === canon(toCodes(GROUPS))) {
+      DIRTY = false; CLOUD_STATE = 'ok'; CUSTOM = true;
+      writeLS(); renderCloud(); renderMeta(); return;
+    }
+    if (DIRTY && !explicit) {          // 本機有未同步的改動，讓使用者決定
+      CLOUD_PENDING = d.groups; CLOUD_STATE = 'conflict'; renderCloud(); return;
+    }
+    GROUPS = fromCodes(d.groups);
+    CUSTOM = true; DIRTY = false; CLOUD_STATE = 'ok';
+    writeLS(); afterEdit();
+  } catch (e) {
+    CLOUD_STATE = 'error'; CLOUD_ERR = e.message; renderCloud();
+  }
+}
+
+async function pushCloud() {
+  if (!WORKER) return;
+  const key = ($('#mg-key') && $('#mg-key').value || '').trim();
+  if (!key) return mgMsg('請先填編輯金鑰');
+  mgMsg('儲存中…', true);
+  try {
+    const r = await fetch(WORKER + '/groups', {
+      method: 'PUT',
+      headers: {'content-type': 'application/json', 'x-edit-key': key},
+      body: JSON.stringify(toCodes(GROUPS)),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    CLOUD_VER = d.version; CLOUD_AT = d.updated_at;
+    DIRTY = false; CLOUD_STATE = 'ok'; CLOUD_PENDING = null;
+    try { localStorage.setItem(KEY_LS, key); } catch (e) { /* noop */ }
+    writeLS(); renderCloud(); renderMeta();
+    mgMsg(`已存到雲端：version ${d.version}，${d.groups} 個族群 / ${d.stocks} 檔`, true);
+  } catch (e) {
+    mgMsg('存到雲端失敗：' + e.message);
+  }
+}
+/* 族群改動後：重算名單與彙總、更新標頭、重畫目前分頁。
+   GNAMES 一定要在這裡重算 —— 從雲端採用新版本時只換了 GROUPS，
+   漏掉的話清單會停在舊的族群數。 */
 function afterEdit() {
+  GNAMES = Object.keys(GROUPS).sort();
   GSTATS = [];
   if (curGroup && !GROUPS[curGroup]) curGroup = null;
   renderMeta();
@@ -784,6 +871,7 @@ $('#s-no').addEventListener('keydown', e => {
 /* ---------- 族群管理 ---------- */
 function renderManage() {
   if (!$('#mg-newg')) return;
+  renderCloud();
   const total = GNAMES.reduce((a, g) => a + GROUPS[g].length, 0);
   $('#mg-status').innerHTML =
     `<div class="note" style="margin:0">目前為 <b>${CUSTOM ? '自訂族群' : '網站預設族群'}</b>`
@@ -812,6 +900,45 @@ function renderManage() {
         <span class="chip" data-delg="${esc(g)}">刪除族群</span>
       </div><div>${chips || '<span class="dash">（尚無成分股）</span>'}</div></div>`;
   }).join('') : '<div class="empty">還沒有任何族群，用上面的「新增族群」建立。</div>';
+}
+
+function renderCloud() {
+  const card = $('#mg-cloud-card');
+  if (!card) return;
+  card.hidden = !WORKER;
+  if (!WORKER) return;
+
+  const when = CLOUD_AT ? new Date(CLOUD_AT).toLocaleString('zh-TW') : '—';
+  const line = {
+    idle: '<span class="dash">尚未連線</span>',
+    loading: '<span class="dash">讀取中…</span>',
+    ok: `<span class="down">已同步</span>　雲端 version ${CLOUD_VER}，更新於 ${esc(when)}`,
+    empty: '<span class="dash">雲端還沒有資料</span>　按「儲存到雲端」把目前這份存上去',
+    error: `<span class="neg">連不上雲端</span>　${esc(CLOUD_ERR)}　（先用本機這份）`,
+    conflict: `<span class="neg">版本衝突</span>　本機有未同步的修改，雲端另有 version ${CLOUD_VER}（${esc(when)}）`,
+  }[CLOUD_STATE] || '';
+
+  let extra = '';
+  if (CLOUD_STATE === 'conflict') {
+    extra = `<div class="row" style="margin-top:8px">
+      <button class="go" id="mg-take-cloud">用雲端覆蓋本機</button>
+      <button class="go" id="mg-keep-local" style="background:var(--panel);color:var(--ink);border-color:var(--rule)">保留本機（之後再儲存到雲端）</button>
+    </div>`;
+  } else if (DIRTY && CLOUD_STATE !== 'loading') {
+    extra = '<div class="note" style="margin:6px 0 0"><span class="pos">本機有尚未儲存到雲端的修改</span></div>';
+  }
+  $('#mg-cloud-status').innerHTML = `<div class="note" style="margin:0">${line}</div>${extra}`;
+
+  if ($('#mg-take-cloud')) {
+    $('#mg-take-cloud').addEventListener('click', () => {
+      GROUPS = fromCodes(CLOUD_PENDING);
+      CUSTOM = true; DIRTY = false; CLOUD_STATE = 'ok'; CLOUD_PENDING = null;
+      writeLS(); afterEdit();
+    });
+    $('#mg-keep-local').addEventListener('click', () => {
+      CLOUD_STATE = 'ok'; CLOUD_PENDING = null; renderCloud();
+    });
+  }
 }
 
 function mgMsg(text, ok) {
@@ -921,6 +1048,21 @@ function bindManage() {
       resetGroups(); afterEdit();
     }
   });
+
+  if (WORKER) {
+    try {
+      const k = localStorage.getItem(KEY_LS);
+      if (k) $('#mg-key').value = k;
+    } catch (e) { /* noop */ }
+    $('#mg-push').addEventListener('click', pushCloud);
+    $('#mg-pull').addEventListener('click', () => {
+      if (DIRTY && !confirm('本機有未同步的修改，從雲端重新載入會蓋掉它們。確定？')) return;
+      fetchCloud(true);
+    });
+    $('#mg-key').addEventListener('keydown', e => {
+      if (e.key === 'Enter') pushCloud();
+    });
+  }
 }
 
 /* ---------- 標頭 ---------- */
@@ -936,4 +1078,7 @@ bindManage();
 renderMeta();
 renderManage();
 renderGroups();
+/* 頁面先用內建／本機這份畫出來，雲端在背景拉，回來再視情況更新，
+   這樣連不上雲端時站台照樣能用。 */
+if (WORKER) fetchCloud(false);
 </script>

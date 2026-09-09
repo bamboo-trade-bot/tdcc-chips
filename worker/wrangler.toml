@@ -1,0 +1,13 @@
+name = "tdcc-chips-groups"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# 只允許自己的站台呼叫。要在本機測就把 http://localhost:5058 一起列進來，逗號分隔。
+[vars]
+ALLOWED_ORIGINS = "https://bamboo-trade-bot.github.io"
+
+# 建立方式：npx wrangler kv namespace create GROUPS
+# 指令會印出 id，貼到下面這行。
+[[kv_namespaces]]
+binding = "GROUPS"
+id = "請填入 KV namespace id"

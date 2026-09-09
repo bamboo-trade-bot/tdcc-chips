@@ -5,6 +5,7 @@ r"""產生單檔的靜態頁 `_site/index.html`，發佈到 GitHub Pages 用。
 
     python build_static.py --export        從本機 SQLite 匯出 static_data/
     python build_static.py --fetch         抓 TDCC 最新一週，補一支週 CSV（排程用）
+    python build_static.py --sync-groups   從 Cloudflare Worker 拉回族群定義
     python build_static.py                 只重建頁面
 
 排程環境（GitHub Actions）只會用到 --fetch 與重建，兩者都不需要 SQLite 或
@@ -68,6 +69,36 @@ def do_fetch():
     return date, True
 
 
+def do_sync_groups():
+    """把 Worker 上的族群拉回來，覆寫 static_data/groups.json。
+
+    這樣「在網站上改族群」跟「repo 裡的族群」不會分岔：雲端是唯一真相，
+    每次排程重建都把它寫回 repo。失敗就沿用 repo 現有版本，不讓建置中斷。
+    """
+    import urllib.request
+
+    cfg = se._load(se.CONFIG_JSON)
+    url = (cfg.get("worker_url") or "").rstrip("/")
+    if not url:
+        print("static_data/config.json 沒有 worker_url，略過族群同步")
+        return False
+    try:
+        with urllib.request.urlopen(url + "/groups", timeout=30) as r:
+            data = json.load(r)
+    except Exception as exc:
+        print("族群同步失敗，沿用 repo 現有版本：%s: %s" % (type(exc).__name__, exc))
+        return False
+
+    groups = data.get("groups")
+    if not groups:
+        print("雲端還沒有族群資料，沿用 repo 現有版本")
+        return False
+    se._dump(se.GROUPS_JSON, groups)
+    print("已從雲端同步 %d 個族群（version %s，%s）"
+          % (len(groups), data.get("version"), data.get("updated_at")))
+    return True
+
+
 def do_build(weeks=None):
     with open(TEMPLATE, encoding="utf-8") as fh:
         tpl = fh.read()
@@ -97,6 +128,8 @@ def main():
                     help="從本機 SQLite 匯出 static_data/（需要 pandas 環境）")
     ap.add_argument("--fetch", action="store_true",
                     help="抓 TDCC 最新一週並補一支週 CSV")
+    ap.add_argument("--sync-groups", action="store_true",
+                    help="從 Cloudflare Worker 拉回族群，覆寫 static_data/groups.json")
     ap.add_argument("--weeks", type=int, default=None,
                     help="頁面只放最近 N 週（預設全部）")
     ap.add_argument("--no-build", action="store_true", help="只更新資料，不重建頁面")
@@ -104,6 +137,8 @@ def main():
 
     if args.export:
         do_export()
+    if args.sync_groups:
+        do_sync_groups()
     if args.fetch:
         do_fetch()
     if not args.no_build:
