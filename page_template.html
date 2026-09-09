@@ -1,0 +1,684 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>集保族群大戶籌碼</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --ground:   #f2f3f0;
+  --panel:    #ffffff;
+  --panel-2:  #f7f8f5;
+  --ink:      #15181d;
+  --ink-2:    #5b6572;
+  --ink-3:    #8d95a1;
+  --rule:     #e0e2df;
+  --rule-2:   #ecedea;
+  --accent:   #a8571b;
+  --accent-soft: #f6ece2;
+  --up:       #cf3030;
+  --up-soft:  #fbeaea;
+  --down:     #16794f;
+  --down-soft:#e6f3ed;
+  --shadow:   0 1px 2px rgba(21,24,29,.06), 0 8px 24px rgba(21,24,29,.05);
+  --f-display: "Noto Serif TC", "Songti TC", serif;
+  --f-body: "Noto Sans TC", -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ground); color: var(--ink);
+  font: 14px/1.55 var(--f-body);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px; }
+
+header { background: var(--panel); border-bottom: 1px solid var(--rule); }
+.head-in { padding: 22px 0 0; }
+h1 {
+  font: 700 27px/1.2 var(--f-display); margin: 0 0 6px;
+  letter-spacing: .5px;
+}
+.meta { color: var(--ink-2); font-size: 13px; margin-bottom: 14px; }
+.meta b { color: var(--ink); font-family: var(--f-mono); font-weight: 600; }
+.meta .sep { color: var(--ink-3); margin: 0 8px; }
+
+nav { display: flex; gap: 2px; flex-wrap: wrap; }
+nav button {
+  font: 500 14px var(--f-body); color: var(--ink-2); cursor: pointer;
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  padding: 9px 15px 11px;
+}
+nav button:hover { color: var(--ink); }
+nav button[aria-selected="true"] {
+  color: var(--accent); border-bottom-color: var(--accent); font-weight: 700;
+}
+
+main { padding: 22px 0 70px; }
+.tab { display: none; }
+.tab.on { display: block; }
+
+.card {
+  background: var(--panel); border: 1px solid var(--rule);
+  border-radius: 10px; box-shadow: var(--shadow);
+  padding: 16px 18px; margin-bottom: 18px;
+}
+.card > h2 {
+  font: 700 15px/1.3 var(--f-body); margin: 0 0 3px; letter-spacing: .3px;
+}
+.card > .note { color: var(--ink-3); font-size: 12px; margin-bottom: 13px; }
+
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 1080px) { .grid4 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 720px)  { .grid4, .grid2 { grid-template-columns: 1fr; } }
+
+/* 橫向分歧長條圖：零軸置中，紅右綠左 */
+.bars { margin-top: 4px; }
+.bar-row {
+  display: grid; grid-template-columns: 62px 1fr 62px;
+  align-items: center; gap: 8px; padding: 2px 0; font-size: 12px;
+}
+.bar-row .lab {
+  text-align: right; color: var(--ink-2); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+}
+.bar-row .lab:hover { color: var(--accent); text-decoration: underline; }
+.bar-row .val { font-family: var(--f-mono); font-size: 11px; }
+.track { position: relative; height: 15px; background: var(--panel-2); border-radius: 3px; }
+.track .zero {
+  position: absolute; top: -1px; bottom: -1px; width: 1px;
+  background: var(--rule); left: 50%;
+}
+.track .fill { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; }
+.fill.pos { background: var(--up); }
+.fill.neg { background: var(--down); }
+
+.kpis { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.kpi {
+  background: var(--panel-2); border: 1px solid var(--rule-2);
+  border-radius: 8px; padding: 9px 14px; min-width: 118px;
+}
+.kpi .k { font-size: 11px; color: var(--ink-3); }
+.kpi .v { font: 600 19px var(--f-mono); margin-top: 2px; }
+
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 9px; text-align: right; white-space: nowrap; }
+th {
+  background: var(--panel-2); font-size: 11px; font-weight: 600;
+  color: var(--ink-2); border-bottom: 1px solid var(--rule);
+  position: sticky; top: 0; cursor: pointer; user-select: none;
+}
+th.na { cursor: default; }
+th.on { color: var(--accent); }
+td { border-bottom: 1px solid var(--rule-2); }
+tbody tr:hover { background: var(--accent-soft); }
+td.l, th.l { text-align: left; }
+td.mono { font-family: var(--f-mono); }
+td.nm { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+td.sub { max-width: 210px; overflow: hidden; text-overflow: ellipsis;
+         color: var(--ink-3); font-size: 11px; }
+
+.pos { color: var(--up); font-weight: 600; }
+.neg { color: var(--down); font-weight: 600; }
+.nil { color: var(--ink-3); }
+.dash { color: #c3c9cf; }
+
+.chip {
+  display: inline-block; background: var(--accent-soft); color: var(--accent);
+  border-radius: 3px; padding: 1px 7px; font-size: 11px; margin: 0 3px 2px 0;
+  cursor: pointer;
+}
+.chip:hover { background: #efdcc8; }
+.pick { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.pick button {
+  font: 500 13px var(--f-body); padding: 5px 12px; cursor: pointer;
+  border: 1px solid var(--rule); border-radius: 999px;
+  background: var(--panel); color: var(--ink-2);
+}
+.pick button:hover { border-color: var(--accent); color: var(--accent); }
+.pick button[aria-pressed="true"] {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+
+label.f { display: flex; flex-direction: column; gap: 3px; font-size: 11px;
+          color: var(--ink-3); }
+input[type=text], input[type=number], select {
+  font: 13px var(--f-body); padding: 5px 8px; color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 6px; background: var(--panel);
+}
+input[type=text] { font-family: var(--f-mono); }
+.row { display: flex; gap: 13px; align-items: flex-end; flex-wrap: wrap; }
+.check { display: flex; align-items: center; gap: 6px; font-size: 13px;
+         color: var(--ink-2); cursor: pointer; }
+button.go {
+  font: 600 13px var(--f-body); padding: 7px 16px; cursor: pointer;
+  background: var(--accent); color: #fff; border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+button.go:hover { background: #8e4715; }
+
+.spark { width: 100%; height: auto; display: block; }
+.spark .ln { fill: none; stroke-width: 1.8; }
+.spark .ax { stroke: var(--rule); stroke-width: 1; }
+.spark .gd { stroke: var(--rule-2); stroke-width: 1; }
+.spark text { font: 10px var(--f-mono); fill: var(--ink-3); }
+.lgd { display: flex; gap: 14px; font-size: 11px; color: var(--ink-2);
+       margin-bottom: 2px; flex-wrap: wrap; }
+.lgd i { display: inline-block; width: 10px; height: 2px; margin-right: 5px;
+         vertical-align: middle; }
+
+.empty { color: var(--ink-3); font-size: 13px; padding: 14px 0; }
+footer { color: var(--ink-3); font-size: 12px; padding: 0 0 40px; }
+footer a { color: var(--ink-2); }
+</style>
+
+<header><div class="wrap head-in">
+  <h1>集保族群大戶籌碼</h1>
+  <div class="meta" id="meta"></div>
+  <nav id="nav">
+    <button data-tab="groups" aria-selected="true">族群排行</button>
+    <button data-tab="members" aria-selected="false">個股明細</button>
+    <button data-tab="top" aria-selected="false">全市場大戶增幅</button>
+    <button data-tab="stock" aria-selected="false">個股查詢</button>
+    <button data-tab="screen" aria-selected="false">選股策略</button>
+  </nav>
+</div></header>
+
+<main class="wrap">
+
+<section class="tab on" id="tab-groups">
+  <div class="grid4" id="g-charts"></div>
+  <div class="card">
+    <h2>族群彙總</h2>
+    <div class="note" id="g-note"></div>
+    <div class="scroll"><table id="g-table"></table></div>
+  </div>
+</section>
+
+<section class="tab" id="tab-members">
+  <div class="card">
+    <h2>選擇族群</h2>
+    <div class="pick" id="m-pick"></div>
+    <div class="kpis" id="m-kpis"></div>
+  </div>
+  <div class="card">
+    <h2 id="m-title">成分股</h2>
+    <div class="note" id="m-note"></div>
+    <div class="scroll"><table id="m-table"></table></div>
+  </div>
+</section>
+
+<section class="tab" id="tab-top">
+  <div class="card">
+    <h2>全市場大戶籌碼變化排行</h2>
+    <div class="note">預設只看市值 ≥ 30 億、成交量 ≥ 500 張、排除 ETF 的個股。</div>
+    <div class="row" id="t-ctrl"></div>
+  </div>
+  <div class="card">
+    <div class="note" id="t-note"></div>
+    <div class="scroll"><table id="t-table"></table></div>
+  </div>
+</section>
+
+<section class="tab" id="tab-stock">
+  <div class="card">
+    <div class="row">
+      <label class="f">證券代號
+        <input type="text" id="s-no" placeholder="2330" size="10"></label>
+      <button class="go" id="s-go">查詢</button>
+      <div class="note" id="s-info" style="margin:0"></div>
+    </div>
+  </div>
+  <div id="s-body"></div>
+</section>
+
+<section class="tab" id="tab-screen">
+  <div class="card">
+    <h2>籌碼選股策略</h2>
+    <div class="note">依集保資料篩選符合條件的個股。基本門檻：市值 ≥ 30 億、成交量 ≥ 500 張、非 ETF。</div>
+    <div class="row" id="sc-ctrl"></div>
+  </div>
+  <div class="card">
+    <div class="note" id="sc-note"></div>
+    <div class="scroll"><table id="sc-table"></table></div>
+  </div>
+</section>
+
+</main>
+
+<footer class="wrap">
+  資料來源：<a href="https://www.tdcc.com.tw/portal/zh/smWeb/qryStock" target="_blank"
+  rel="noopener">臺灣集中保管結算所 — 集保戶股權分散表</a>。
+  市值／成交量／細產業為族群表匯出當下的快照，非每週更新。
+  本頁為公開資料整理，不構成投資建議。
+</footer>
+
+<script>
+const DATA = /*__DATA__*/;
+
+/* ---------- 基礎 ---------- */
+const $ = s => document.querySelector(s);
+const S = DATA.series, LAST = S.length - 1;
+const CODES = DATA.codes, INFO = DATA.info;
+const GROUPS = DATA.groups;
+const GNAMES = Object.keys(GROUPS).sort();
+
+const roc = d => d ? `${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6)}` : '—';
+const esc = s => String(s == null ? '' : s)
+  .replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const nf = (v, d = 0) => v == null ? '—'
+  : Number(v).toLocaleString('zh-TW', {minimumFractionDigits: d, maximumFractionDigits: d});
+
+function sign(v, d = 2, suf = '') {
+  if (v == null || Number.isNaN(v)) return '<span class="dash">—</span>';
+  const n = +v, cls = n > 0 ? 'pos' : n < 0 ? 'neg' : 'nil';
+  return `<span class="${cls}">${n > 0 ? '+' : ''}${nf(n, d)}${suf}</span>`;
+}
+/* ETF / 受益證券：00 開頭或 6 碼純數字 */
+const isETF = c => c.startsWith('00') || (c.length === 6 && /^\d+$/.test(c));
+
+/* 目前選定的本期 / 前期 index */
+let W = LAST, P = LAST - 1;
+
+const val = (w, k, i) => (w < 0 || w > LAST) ? null : S[w][k][i];
+function diff(k, i) {
+  const a = val(W, k, i), b = val(P, k, i);
+  return (a == null || b == null) ? null : a - b;
+}
+
+/* 個股一列指標 */
+function row(i) {
+  const people = val(W, 'people', i);
+  const lots = val(W, 'lots', i);
+  const pPeople = val(P, 'people', i);
+  const info = INFO[i] || {};
+  return {
+    i, code: CODES[i], name: info.n || '', market: info.m || '',
+    sub: info.s || '', cap: info.c ?? null, vol: info.v ?? null,
+    people, lots,
+    b4p: val(W, 'b4_pct', i), d_b4p: diff('b4_pct', i),
+    d_b4lots: diff('b4_lots', i),
+    b4people: val(W, 'b4_people', i), d_b4people: diff('b4_people', i),
+    b1p: val(W, 'b1_pct', i), d_b1p: diff('b1_pct', i),
+    b1people: val(W, 'b1_people', i), d_b1people: diff('b1_people', i),
+    s10p: val(W, 's10_pct', i), d_s10p: diff('s10_pct', i),
+    d_people_pct: (people != null && pPeople) ? (people - pPeople) / pPeople * 100 : null,
+    avgLots: people ? lots / people : null,
+  };
+}
+
+/* 是否連 N 週同向 */
+function streak(k, i, n, up) {
+  for (let s = 0; s < n; s++) {
+    const a = val(W - s, k, i), b = val(W - s - 1, k, i);
+    if (a == null || b == null) return false;
+    if (up ? !(a > b) : !(a < b)) return false;
+  }
+  return true;
+}
+
+/* ---------- 分歧長條圖 ---------- */
+function barChart(title, rows, fmt) {
+  const max = Math.max(1e-9, ...rows.map(r => Math.abs(r.v)));
+  const bars = rows.map(r => {
+    const w = Math.abs(r.v) / max * 50;
+    const style = r.v >= 0 ? `left:50%;width:${w}%` : `right:50%;width:${w}%`;
+    return `<div class="bar-row">
+      <span class="lab" data-group="${esc(r.k)}" title="${esc(r.k)}">${esc(r.k)}</span>
+      <span class="track"><span class="zero"></span>
+        <span class="fill ${r.v >= 0 ? 'pos' : 'neg'}" style="${style}"></span></span>
+      <span class="val ${r.v > 0 ? 'pos' : r.v < 0 ? 'neg' : 'nil'}">${fmt(r.v)}</span>
+    </div>`;
+  }).join('');
+  return `<div class="card"><h2>${title}</h2><div class="bars">${bars}</div></div>`;
+}
+
+/* ---------- 族群彙總 ---------- */
+function groupStat(name) {
+  const idxs = GROUPS[name] || [];
+  const rs = idxs.map(row).filter(r => r.b4p != null);
+  const withPrev = rs.filter(r => r.d_b4p != null);
+  const avg = (arr, f) => arr.length
+    ? arr.reduce((a, r) => a + f(r), 0) / arr.length : null;
+  const sum = (arr, f) => arr.reduce((a, r) => a + (f(r) || 0), 0);
+  const totLots = sum(rs, r => r.lots);
+  const b4Lots = sum(rs, r => (r.b4p / 100) * r.lots);
+  const prevB1 = withPrev.reduce((a, r) => a + (r.b1people - r.d_b1people), 0);
+  const dB1 = sum(withPrev, r => r.d_b1people);
+  return {
+    name, n: rs.length, rows: rs,
+    b4p: avg(rs, r => r.b4p),
+    b4pW: totLots ? b4Lots / totLots * 100 : null,
+    d_b4p: avg(withPrev, r => r.d_b4p),
+    d_b4lots: sum(withPrev, r => r.d_b4lots),
+    d_b4people: sum(withPrev, r => r.d_b4people),
+    b1people: sum(rs, r => r.b1people),
+    d_b1people: dB1,
+    d_b1people_pct: prevB1 ? dB1 / prevB1 * 100 : null,
+    s10p: avg(rs, r => r.s10p),
+    d_s10p: avg(withPrev, r => r.d_s10p),
+    people: sum(rs, r => r.people),
+    up: withPrev.filter(r => r.d_b4p > 0).length,
+    down: withPrev.filter(r => r.d_b4p < 0).length,
+  };
+}
+let GSTATS = [];
+
+function renderGroups() {
+  GSTATS = GNAMES.map(groupStat).filter(g => g.n);
+  const by = k => GSTATS.filter(g => g[k] != null)
+    .map(g => ({k: g.name, v: g[k]})).sort((a, b) => a.v - b.v);
+
+  $('#g-charts').innerHTML =
+    barChart('大戶比例週變化（%）', by('d_b4p'), v => (v > 0 ? '+' : '') + v.toFixed(2) + '%') +
+    barChart('大戶人數週變化（人）', by('d_b4people'), v => (v > 0 ? '+' : '') + nf(v) + '人') +
+    barChart('千張大戶人數週變化（人）', by('d_b1people'), v => (v > 0 ? '+' : '') + nf(v) + '人') +
+    barChart('千張大戶人數週變化（%）', by('d_b1people_pct'), v => (v > 0 ? '+' : '') + v.toFixed(2) + '%');
+
+  $('#g-note').textContent =
+    `${roc(S[W].date)} vs ${roc(S[P] && S[P].date)}　｜　大戶＝${DATA.big_lots} 張以上（分級 12~15）、` +
+    `千張大戶＝分級 15、散戶＝${DATA.small_lots} 張以下（分級 1~3）`;
+
+  const sorted = [...GSTATS].sort((a, b) => (b.d_b4p ?? -1e9) - (a.d_b4p ?? -1e9));
+  $('#g-table').innerHTML = `<thead><tr>
+      <th class="l na">族群</th><th class="na">檔數</th>
+      <th class="na">大戶持股%<br>等權</th><th class="na">大戶增減%</th>
+      <th class="na">大戶持股%<br>股數加權</th><th class="na">大戶增減張數</th>
+      <th class="na">大戶人數</th><th class="na">大戶人數增減</th>
+      <th class="na">千張大戶人數</th><th class="na">千張增減</th>
+      <th class="na">散戶持股%</th><th class="na">散戶增減%</th>
+      <th class="na">增／減家數</th></tr></thead><tbody>` +
+    sorted.map(g => `<tr>
+      <td class="l"><span class="chip" data-group="${esc(g.name)}">${esc(g.name)}</span></td>
+      <td class="mono">${g.n}</td>
+      <td class="mono">${nf(g.b4p, 2)}</td><td class="mono">${sign(g.d_b4p)}</td>
+      <td class="mono">${nf(g.b4pW, 2)}</td><td class="mono">${sign(g.d_b4lots, 0)}</td>
+      <td class="mono">${nf(g.rows.reduce((a, r) => a + r.b4people, 0))}</td>
+      <td class="mono">${sign(g.d_b4people, 0)}</td>
+      <td class="mono">${nf(g.b1people)}</td><td class="mono">${sign(g.d_b1people, 0)}</td>
+      <td class="mono">${nf(g.s10p, 2)}</td><td class="mono">${sign(g.d_s10p)}</td>
+      <td class="mono"><span class="pos">${g.up}</span> / <span class="neg">${g.down}</span></td>
+    </tr>`).join('') + '</tbody>';
+}
+
+/* ---------- 個股表格（共用） ---------- */
+const STOCK_COLS = [
+  ['code', '代號', r => `<span class="chip" data-stock="${esc(r.code)}">${esc(r.code)}</span>`, 'l'],
+  ['name', '名稱', r => esc(r.name), 'l nm'],
+  ['b4p', '大戶持股%', r => nf(r.b4p, 2), 'mono'],
+  ['d_b4p', '大戶增減%', r => sign(r.d_b4p), 'mono'],
+  ['d_b4lots', '大戶增減張數', r => sign(r.d_b4lots, 0), 'mono'],
+  ['b4people', '大戶人數', r => nf(r.b4people), 'mono'],
+  ['d_b4people', '大戶人數增減', r => sign(r.d_b4people, 0), 'mono'],
+  ['b1people', '千張大戶', r => nf(r.b1people), 'mono'],
+  ['d_b1people', '千張增減', r => sign(r.d_b1people, 0), 'mono'],
+  ['s10p', '散戶持股%', r => nf(r.s10p, 2), 'mono'],
+  ['d_s10p', '散戶增減%', r => sign(r.d_s10p), 'mono'],
+  ['people', '股東人數', r => nf(r.people), 'mono'],
+  ['d_people_pct', '人數增減%', r => sign(r.d_people_pct, 2, '%'), 'mono'],
+  ['avgLots', '平均張數', r => nf(r.avgLots, 2), 'mono'],
+  ['cap', '市值(億)', r => nf(r.cap, 1), 'mono'],
+  ['sub', '細產業', r => esc(r.sub), 'sub'],
+];
+
+const sortState = {};
+function stockTable(sel, rows, defKey) {
+  const st = sortState[sel] || (sortState[sel] = {key: defKey, desc: true});
+  const has = rows.filter(r => r[st.key] != null);
+  const lack = rows.filter(r => r[st.key] == null);
+  has.sort((a, b) => typeof a[st.key] === 'string'
+    ? String(a[st.key]).localeCompare(b[st.key]) * (st.desc ? -1 : 1)
+    : (a[st.key] - b[st.key]) * (st.desc ? -1 : 1));
+  const all = [...has, ...lack];
+  $(sel).innerHTML = '<thead><tr>' + STOCK_COLS.map(([k, label, , cls]) =>
+    `<th class="${cls && cls.includes('l') ? 'l' : ''} ${st.key === k ? 'on' : ''}"
+      data-sort="${k}">${label}${st.key === k ? (st.desc ? ' ▾' : ' ▴') : ''}</th>`).join('') +
+    '</tr></thead><tbody>' + (all.length ? all.map(r => '<tr>' +
+    STOCK_COLS.map(([, , fn, cls]) => `<td class="${cls || ''}">${fn(r)}</td>`).join('') +
+    '</tr>').join('') : '<tr><td colspan="16" class="empty">沒有符合條件的個股</td></tr>') +
+    '</tbody>';
+  $(sel).querySelectorAll('th[data-sort]').forEach(th =>
+    th.addEventListener('click', () => {
+      const k = th.dataset.sort;
+      if (st.key === k) st.desc = !st.desc; else { st.key = k; st.desc = true; }
+      stockTable(sel, rows, defKey);
+    }));
+}
+
+/* ---------- 個股明細（依族群） ---------- */
+let curGroup = null;
+function renderMembers() {
+  if (!GSTATS.length) renderGroups();
+  if (!curGroup) curGroup = GSTATS.slice().sort((a, b) =>
+    (b.d_b4p ?? -1e9) - (a.d_b4p ?? -1e9))[0].name;
+  $('#m-pick').innerHTML = GNAMES.map(g =>
+    `<button data-pick="${esc(g)}" aria-pressed="${g === curGroup}">${esc(g)}</button>`).join('');
+  $('#m-pick').querySelectorAll('button').forEach(b =>
+    b.addEventListener('click', () => { curGroup = b.dataset.pick; renderMembers(); }));
+
+  const g = GSTATS.find(x => x.name === curGroup);
+  if (!g) return;
+  $('#m-kpis').innerHTML = [
+    ['成分股', g.n + ' 檔'],
+    ['大戶持股%（等權）', nf(g.b4p, 2)],
+    ['本期增減', (g.d_b4p == null ? '—' : (g.d_b4p > 0 ? '+' : '') + nf(g.d_b4p, 2) + ' pp')],
+    ['大戶增減張數', nf(g.d_b4lots, 0)],
+    ['千張大戶人數', nf(g.b1people)],
+    ['增／減家數', `${g.up} / ${g.down}`],
+  ].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  $('#m-title').textContent = curGroup + ' — 成分股';
+  $('#m-note').textContent = `${roc(S[W].date)} vs ${roc(S[P] && S[P].date)}`;
+  stockTable('#m-table', g.rows, 'd_b4p');
+}
+
+/* ---------- 全市場排行 ---------- */
+const TOP_SORTS = [
+  ['d_b4p', '大戶比例增減%'], ['d_b4lots', '大戶增減張數'],
+  ['d_b1people', '千張大戶人數增減'], ['d_b4people', '大戶人數增減'],
+  ['d_s10p', '散戶比例增減%'], ['d_people_pct', '股東人數增減%'],
+  ['b4p', '大戶持股比例'],
+];
+function baseUniverse(minCap, minVol, etf) {
+  const out = [];
+  for (let i = 0; i < CODES.length; i++) {
+    if (!etf && isETF(CODES[i])) continue;
+    const info = INFO[i] || {};
+    if (minCap && !(info.c >= minCap)) continue;
+    if (minVol && !(info.v >= minVol)) continue;
+    const r = row(i);
+    if (r.b4p == null) continue;
+    out.push(r);
+  }
+  return out;
+}
+function renderTop(first) {
+  if (first) {
+    $('#t-ctrl').innerHTML = `
+      <label class="f">排序依據<select id="t-sort">${TOP_SORTS.map(
+        ([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+      <label class="f">市值 ≥（億）<input type="number" id="t-cap" value="30" step="10" style="width:88px"></label>
+      <label class="f">成交量 ≥（張）<input type="number" id="t-vol" value="500" step="100" style="width:96px"></label>
+      <label class="f">顯示<select id="t-limit"><option>20</option><option>50</option>
+        <option selected>100</option><option value="0">全部</option></select></label>
+      <label class="check"><input type="checkbox" id="t-etf"> 含 ETF</label>
+      <button class="go" id="t-go">查詢</button>`;
+    ['t-go'].forEach(id => $('#' + id).addEventListener('click', () => renderTop(false)));
+    ['t-sort', 't-limit'].forEach(id => $('#' + id).addEventListener('change', () => renderTop(false)));
+  }
+  const rows = baseUniverse(+$('#t-cap').value || 0, +$('#t-vol').value || 0,
+    $('#t-etf').checked);
+  const lim = +$('#t-limit').value;
+  const key = $('#t-sort').value;
+  const has = rows.filter(r => r[key] != null).sort((a, b) => b[key] - a[key]);
+  const show = lim ? has.slice(0, lim) : has;
+  $('#t-note').textContent =
+    `${roc(S[W].date)} vs ${roc(S[P] && S[P].date)}　｜　符合 ${nf(rows.length)} 檔，顯示 ${show.length} 檔`;
+  sortState['#t-table'] = {key, desc: true};
+  stockTable('#t-table', show, key);
+}
+
+/* ---------- 個股查詢 ---------- */
+function sparkline(series, opts) {
+  const w = 560, h = 168, pl = 44, pr = 12, pt = 12, pb = 22;
+  const all = series.flatMap(s => s.data).filter(v => v != null);
+  if (!all.length) return '';
+  let lo = Math.min(...all), hi = Math.max(...all);
+  if (hi === lo) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * .12; lo -= pad; hi += pad;
+  const n = series[0].data.length;
+  const X = i => pl + (n === 1 ? 0 : i * (w - pl - pr) / (n - 1));
+  const Y = v => pt + (hi - v) / (hi - lo) * (h - pt - pb);
+  const ticks = [lo, (lo + hi) / 2, hi].map(v =>
+    `<line class="gd" x1="${pl}" y1="${Y(v).toFixed(1)}" x2="${w - pr}" y2="${Y(v).toFixed(1)}"/>
+     <text x="${pl - 6}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end">${v.toFixed(opts.dp ?? 1)}</text>`).join('');
+  const lines = series.map(s => `<polyline class="ln" stroke="${s.color}" points="${
+    s.data.map((v, i) => v == null ? '' : `${X(i).toFixed(1)},${Y(v).toFixed(1)}`)
+      .filter(Boolean).join(' ')}"/>`).join('');
+  const labs = opts.labels.map((d, i) =>
+    (i === 0 || i === n - 1 || i === (n >> 1))
+      ? `<text x="${X(i).toFixed(1)}" y="${h - 6}" text-anchor="middle">${d.slice(4, 6)}/${d.slice(6)}</text>`
+      : '').join('');
+  const lgd = series.map(s =>
+    `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('');
+  return `<div class="lgd">${lgd}</div><svg class="spark" viewBox="0 0 ${w} ${h}"
+    >${ticks}${lines}${labs}</svg>`;
+}
+
+function renderStock(code) {
+  code = (code || '').trim().toUpperCase();
+  const i = CODES.indexOf(code);
+  if (i < 0) {
+    $('#s-info').innerHTML = code ? `<span class="neg">找不到 ${esc(code)}</span>` : '';
+    $('#s-body').innerHTML = '';
+    return;
+  }
+  const info = INFO[i] || {}, r = row(i);
+  const gs = GNAMES.filter(g => GROUPS[g].includes(i));
+  $('#s-info').innerHTML = `<b>${esc(info.n || code)}</b>　${esc(info.m || '')} ${esc(info.i || '')}`
+    + (gs.length ? '　' + gs.map(g => `<span class="chip" data-group="${esc(g)}">${esc(g)}</span>`).join('') : '')
+    + (info.s ? `<br><span class="dash">${esc(info.s)}</span>` : '');
+
+  const labels = S.map(s => s.date);
+  const pick = k => S.map(s => s[k][i]);
+  $('#s-body').innerHTML = `
+    <div class="card"><div class="kpis">${[
+      ['大戶持股%', nf(r.b4p, 2)], ['本週增減', (r.d_b4p == null ? '—' :
+        (r.d_b4p > 0 ? '+' : '') + nf(r.d_b4p, 2) + ' pp')],
+      ['千張大戶', nf(r.b1people) + ' 人'], ['千張增減', (r.d_b1people == null ? '—' :
+        (r.d_b1people > 0 ? '+' : '') + nf(r.d_b1people))],
+      ['散戶持股%', nf(r.s10p, 2)], ['股東人數', nf(r.people)],
+      ['人數增減%', (r.d_people_pct == null ? '—' : nf(r.d_people_pct, 2) + '%')],
+      ['平均張數', nf(r.avgLots, 2)],
+    ].map(([k, v]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div></div>
+    <div class="grid2">
+      <div class="card"><h2>大戶／散戶持股比例</h2>${sparkline([
+        {name: '大戶 400 張以上 %', color: '#cf3030', data: pick('b4_pct')},
+        {name: '千張大戶 %', color: '#a8571b', data: pick('b1_pct')},
+        {name: '散戶 10 張以下 %', color: '#16794f', data: pick('s10_pct')},
+      ], {labels, dp: 1})}</div>
+      <div class="card"><h2>股東總人數</h2>${sparkline([
+        {name: '股東總人數', color: '#2a78d6', data: pick('people')},
+      ], {labels, dp: 0})}</div>
+      <div class="card"><h2>千張大戶人數</h2>${sparkline([
+        {name: '千張大戶人數', color: '#a8571b', data: pick('b1_people')},
+      ], {labels, dp: 0})}</div>
+      <div class="card"><h2>大戶持有張數</h2>${sparkline([
+        {name: '大戶 400 張以上持有張數', color: '#cf3030', data: pick('b4_lots')},
+      ], {labels, dp: 0})}</div>
+    </div>
+    <div class="card"><h2>逐週明細</h2><div class="scroll"><table>
+      <thead><tr><th class="l na">資料日期</th><th class="na">大戶持股%</th>
+      <th class="na">大戶人數</th><th class="na">大戶張數</th>
+      <th class="na">千張大戶%</th><th class="na">千張大戶人數</th>
+      <th class="na">散戶持股%</th><th class="na">股東人數</th>
+      <th class="na">平均張數</th></tr></thead><tbody>${
+        S.map((s, k) => {
+          const pe = s.people[i], lo = s.lots[i];
+          return `<tr><td class="l mono">${roc(s.date)}</td>
+            <td class="mono">${nf(s.b4_pct[i], 2)}</td>
+            <td class="mono">${nf(s.b4_people[i])}</td>
+            <td class="mono">${nf(s.b4_lots[i])}</td>
+            <td class="mono">${nf(s.b1_pct[i], 2)}</td>
+            <td class="mono">${nf(s.b1_people[i])}</td>
+            <td class="mono">${nf(s.s10_pct[i], 2)}</td>
+            <td class="mono">${nf(pe)}</td>
+            <td class="mono">${pe ? nf(lo / pe, 2) : '—'}</td></tr>`;
+        }).reverse().join('')}</tbody></table></div></div>`;
+}
+
+/* ---------- 選股策略 ---------- */
+function renderScreen(first) {
+  if (first) {
+    const subs = [...new Set(INFO.flatMap(o => (o.s || '').split(',')
+      .map(x => x.trim()).filter(Boolean)))].sort();
+    $('#sc-ctrl').innerHTML = `
+      <label class="f">市值 ≥（億）<input type="number" id="sc-cap" value="30" step="10" style="width:88px"></label>
+      <label class="f">成交量 ≥（張）<input type="number" id="sc-vol" value="500" step="100" style="width:96px"></label>
+      <label class="f">大戶比例增幅 ≥（%點）<input type="number" id="sc-dbig" value="0" step="0.1" style="width:96px"></label>
+      <label class="f">散戶比例減幅 ≥（%點）<input type="number" id="sc-dsml" value="0" step="0.1" style="width:96px"></label>
+      <label class="f">千張大戶人數 ≥<input type="number" id="sc-b1" value="0" step="1" style="width:88px"></label>
+      <label class="f">細產業<select id="sc-sub"><option value="">全部</option>${
+        subs.map(s => `<option>${esc(s)}</option>`).join('')}</select></label>
+      <label class="check"><input type="checkbox" id="sc-big2"> 大戶比例連 2 週↑</label>
+      <label class="check"><input type="checkbox" id="sc-sml2"> 散戶比例連 2 週↓</label>
+      <label class="check"><input type="checkbox" id="sc-b1up" checked> 千張大戶人數↑</label>
+      <label class="check"><input type="checkbox" id="sc-etf"> 含 ETF</label>
+      <button class="go" id="sc-go">篩選</button>`;
+    $('#sc-go').addEventListener('click', () => renderScreen(false));
+  }
+  const dbig = +$('#sc-dbig').value || 0, dsml = +$('#sc-dsml').value || 0;
+  const b1min = +$('#sc-b1').value || 0, sub = $('#sc-sub').value;
+  const rows = baseUniverse(+$('#sc-cap').value || 0, +$('#sc-vol').value || 0,
+    $('#sc-etf').checked).filter(r => {
+      if (r.d_b4p == null || r.d_b4p < dbig) return false;
+      if (dsml && !(r.d_s10p != null && -r.d_s10p >= dsml)) return false;
+      if (b1min && !(r.b1people >= b1min)) return false;
+      if (sub && !(r.sub || '').split(',').map(x => x.trim()).includes(sub)) return false;
+      if ($('#sc-big2').checked && !streak('b4_pct', r.i, 2, true)) return false;
+      if ($('#sc-sml2').checked && !streak('s10_pct', r.i, 2, false)) return false;
+      if ($('#sc-b1up').checked && !(r.d_b1people > 0)) return false;
+      return true;
+    });
+  $('#sc-note').innerHTML = `${roc(S[W].date)} vs ${roc(S[P] && S[P].date)}　｜　`
+    + `符合條件 <b>${nf(rows.length)}</b> 檔`;
+  sortState['#sc-table'] = {key: 'd_b4p', desc: true};
+  stockTable('#sc-table', rows, 'd_b4p');
+}
+
+/* ---------- 分頁與導覽 ---------- */
+const RENDER = {
+  groups: renderGroups, members: renderMembers,
+  top: () => renderTop(!$('#t-sort')),
+  stock: () => { if (!$('#s-body').innerHTML) renderStock($('#s-no').value); },
+  screen: () => renderScreen(!$('#sc-cap')),
+};
+function show(tab) {
+  document.querySelectorAll('#nav button').forEach(b =>
+    b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  document.querySelectorAll('.tab').forEach(s =>
+    s.classList.toggle('on', s.id === 'tab-' + tab));
+  RENDER[tab] && RENDER[tab]();
+}
+document.querySelectorAll('#nav button').forEach(b =>
+  b.addEventListener('click', () => show(b.dataset.tab)));
+
+document.addEventListener('click', e => {
+  const s = e.target.closest('[data-stock]');
+  if (s) { $('#s-no').value = s.dataset.stock; show('stock'); renderStock(s.dataset.stock); return; }
+  const g = e.target.closest('[data-group]');
+  if (g) { curGroup = g.dataset.group; show('members'); }
+});
+$('#s-go').addEventListener('click', () => renderStock($('#s-no').value));
+$('#s-no').addEventListener('keydown', e => {
+  if (e.key === 'Enter') renderStock($('#s-no').value);
+});
+
+$('#meta').innerHTML =
+  `本週：<b>${roc(S[W].date)}</b>　上週：<b>${roc(S[P] && S[P].date)}</b>`
+  + `<span class="sep">│</span>${S.length} 週資料　${nf(CODES.length)} 檔證券　${GNAMES.length} 個族群`
+  + `<span class="sep">│</span>更新於 ${esc(DATA.generated_at)}`;
+renderGroups();
+</script>

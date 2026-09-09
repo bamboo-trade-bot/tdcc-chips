@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>集保籌碼分析</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header>
+  <div class="title-row">
+    <h1>集保籌碼分析</h1>
+    <span class="sub" id="coverage">載入中…</span>
+  </div>
+  <nav>
+    <button data-page="rank" class="active">全市場排行</button>
+    <button data-page="groups">族群總覽</button>
+    <button data-page="group">族群明細</button>
+    <button data-page="stock">個股</button>
+    <button data-page="data">資料管理</button>
+  </nav>
+</header>
+
+<div class="controls">
+  <div class="field">
+    <label>資料日期（本期）</label>
+    <select id="c-date"></select>
+  </div>
+  <div class="field">
+    <label>比較基準</label>
+    <select id="c-span">
+      <option value="1">前 1 週</option>
+      <option value="2">前 2 週</option>
+      <option value="4">前 4 週</option>
+      <option value="8">前 8 週</option>
+      <option value="13">前 13 週</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>大戶門檻</label>
+    <select id="c-big"></select>
+  </div>
+  <div class="field">
+    <label>散戶門檻</label>
+    <select id="c-small"></select>
+  </div>
+  <button class="btn primary" id="c-apply">套用</button>
+  <span class="sub" id="c-compare"></span>
+</div>
+
+<main>
+
+<!-- ================= 全市場排行 ================= -->
+<section class="page active" id="page-rank">
+  <div class="panel">
+    <div class="controls" style="padding:0;border:0;background:none">
+      <div class="field">
+        <label>排序依據</label>
+        <select id="r-sort"></select>
+      </div>
+      <div class="field">
+        <label>方向</label>
+        <select id="r-order">
+          <option value="desc">由大到小</option>
+          <option value="asc">由小到大</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>市場</label>
+        <select id="r-market">
+          <option value="">全部</option>
+          <option value="上市">上市</option>
+          <option value="上櫃">上櫃</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>族群</label>
+        <select id="r-group"><option value="">全部</option></select>
+      </div>
+      <div class="field">
+        <label>最少股東人數</label>
+        <input type="number" id="r-minpeople" value="1000" min="0" step="500" style="width:100px">
+      </div>
+      <div class="field">
+        <label>顯示筆數</label>
+        <select id="r-limit">
+          <option>50</option><option selected>100</option>
+          <option>300</option><option value="0">全部</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>搜尋代號 / 名稱</label>
+        <input type="text" id="r-q" placeholder="例如 2330 或 台積">
+      </div>
+      <div class="field">
+        <label><input type="checkbox" id="r-etf"> 含 ETF</label>
+      </div>
+      <button class="btn primary" id="r-go">查詢</button>
+      <button class="btn" id="r-csv">匯出 CSV</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 id="r-title">排行</h2>
+    <div class="msg" id="r-msg"></div>
+    <div class="table-wrap"><table id="r-table"></table></div>
+  </div>
+</section>
+
+<!-- ================= 族群總覽 ================= -->
+<section class="page" id="page-groups">
+  <div class="panel">
+    <h2>本週族群大戶籌碼</h2>
+    <div class="msg" id="g-msg"></div>
+    <div class="table-wrap"><table id="g-table"></table></div>
+  </div>
+  <div class="panel">
+    <h2>族群大戶持股比例增減</h2>
+    <div class="chart-box"><canvas id="g-chart"></canvas></div>
+  </div>
+</section>
+
+<!-- ================= 族群明細 ================= -->
+<section class="page" id="page-group">
+  <div class="panel">
+    <h2>選擇族群</h2>
+    <div class="group-pick" id="gd-pick"></div>
+    <div class="cards" id="gd-cards"></div>
+  </div>
+  <div class="panel">
+    <h2 id="gd-title">族群走勢</h2>
+    <div class="chart-box"><canvas id="gd-chart"></canvas></div>
+  </div>
+  <div class="panel">
+    <h2>成分股明細</h2>
+    <div class="msg" id="gd-msg"></div>
+    <div class="table-wrap"><table id="gd-table"></table></div>
+  </div>
+</section>
+
+<!-- ================= 個股 ================= -->
+<section class="page" id="page-stock">
+  <div class="panel">
+    <div class="controls" style="padding:0;border:0;background:none">
+      <div class="field">
+        <label>證券代號</label>
+        <input type="text" id="s-no" placeholder="2330">
+      </div>
+      <button class="btn primary" id="s-go">查詢</button>
+      <span class="sub" id="s-info"></span>
+    </div>
+  </div>
+  <div class="split">
+    <div class="panel">
+      <h2>大戶 / 散戶持股比例走勢</h2>
+      <div class="chart-box"><canvas id="s-chart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>股東總人數走勢</h2>
+      <div class="chart-box"><canvas id="s-chart2"></canvas></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h2 id="s-dist-title">最新一週持股分級分布</h2>
+    <div class="table-wrap"><table id="s-table"></table></div>
+  </div>
+</section>
+
+<!-- ================= 資料管理 ================= -->
+<section class="page" id="page-data">
+  <div class="hint">
+    <b>資料放置位置</b>：集保每週 Excel 放 <code>data\tdcc_weekly\</code>，
+    族群分類 Excel 放 <code>data\groups\</code>，放好後按下方「匯入」。
+    族群檔支援兩種格式：長格式（族群 / 股號 兩欄）或寬格式（每欄標題是族群名稱、下面整排股號）。
+  </div>
+
+  <div class="panel">
+    <h2>目前狀態</h2>
+    <div class="cards" id="d-cards"></div>
+    <div class="progress" id="d-progress" style="display:none"><div class="fill"></div></div>
+    <div class="msg" id="d-msg"></div>
+  </div>
+
+  <div class="panel">
+    <h2>更新動作</h2>
+    <div class="controls" style="padding:0;border:0;background:none">
+      <button class="btn primary" id="d-refresh">抓 TDCC 最新一週（全市場）</button>
+      <button class="btn" id="d-import-weekly">匯入 tdcc_weekly Excel</button>
+      <button class="btn" id="d-import-groups">匯入 groups 族群表</button>
+    </div>
+    <h3>回補歷史（爬 TDCC 查詢頁，逐檔逐週，較慢）</h3>
+    <div class="controls" style="padding:0;border:0;background:none">
+      <div class="field">
+        <label>回補週數</label>
+        <select id="d-weeks">
+          <option>4</option><option selected>13</option>
+          <option>26</option><option>51</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>範圍</label>
+        <select id="d-scope">
+          <option value="groups">只補族群清單內的股票</option>
+          <option value="all">補資料庫內所有股票（很慢）</option>
+        </select>
+      </div>
+      <button class="btn" id="d-backfill">開始回補</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>檔案清單</h2>
+    <div class="split">
+      <div><h3>data\tdcc_weekly</h3><pre class="log" id="d-files-weekly">—</pre></div>
+      <div><h3>data\groups</h3><pre class="log" id="d-files-groups">—</pre></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>匯入紀錄</h2>
+    <pre class="log" id="d-log">—</pre>
+  </div>
+</section>
+
+</main>
+
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

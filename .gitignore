@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv/
+
+# 建置產物，Actions 會重新產生
+_site/
+
+# 本機資料：SQLite 與原始 Excel/CSV 都很大，且靜態站不需要
+# （靜態站要的東西都在 static_data/，那個要進版控）
+data/tdcc.db*
+data/raw/
+data/tdcc_weekly/*.csv
+data/tdcc_weekly/*.xls*
+data/groups/*.xls*
+desktop.ini
+Thumbs.db
+.DS_Store
