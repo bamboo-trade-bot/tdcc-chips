@@ -82,8 +82,14 @@ def do_sync_groups():
     if not url:
         print("static_data/config.json 沒有 worker_url，略過族群同步")
         return False
+    # Cloudflare 會擋掉 urllib 的預設 User-Agent（Python-urllib/x.y）並回 403，
+    # 所以一定要自報一個像樣的 UA。
+    req = urllib.request.Request(url + "/groups", headers={
+        "User-Agent": "tdcc-chips/1.0 (+https://github.com/bamboo-trade-bot/tdcc-chips)",
+        "Accept": "application/json",
+    })
     try:
-        with urllib.request.urlopen(url + "/groups", timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=30) as r:
             data = json.load(r)
     except Exception as exc:
         print("族群同步失敗，沿用 repo 現有版本：%s: %s" % (type(exc).__name__, exc))
