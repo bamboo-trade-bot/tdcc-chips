@@ -554,7 +554,7 @@ let GSTATS = [];
 function renderGroups() {
   GSTATS = GNAMES.map(groupStat).filter(g => g.n);
   const by = k => GSTATS.filter(g => g[k] != null)
-    .map(g => ({k: g.name, v: g[k]})).sort((a, b) => a.v - b.v);
+    .map(g => ({k: g.name, v: g[k]})).sort((a, b) => b.v - a.v);  // 增加最多的在上面
 
   $('#g-charts').innerHTML =
     barChart('大戶比例週變化（%）', by('d_b4p'), v => (v > 0 ? '+' : '') + v.toFixed(2) + '%') +
